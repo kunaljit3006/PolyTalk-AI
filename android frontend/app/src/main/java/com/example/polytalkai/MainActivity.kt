@@ -24,18 +24,25 @@ import com.example.polytalkai.ui.theme.*
 import kotlinx.coroutines.delay
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.handleDeeplinks
 import com.example.polytalkai.network.SupabaseManager
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SupabaseManager.client.handleDeeplinks(intent)
         enableEdgeToEdge()
         setContent {
             PolyTalkTheme {
                 MainAppContainer()
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        SupabaseManager.client.handleDeeplinks(intent)
     }
 }
 
