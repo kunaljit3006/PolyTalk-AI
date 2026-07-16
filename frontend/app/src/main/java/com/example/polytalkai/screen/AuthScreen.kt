@@ -31,16 +31,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.polytalkai.glassmorphic
 import com.example.polytalkai.ui.theme.*
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import kotlinx.coroutines.launch
+import io.github.jan.supabase.compose.auth.rememberLoginWithGoogle
+import io.github.jan.supabase.compose.auth.composable.NativeSignInResult
+import io.github.jan.supabase.compose.auth.composeAuth
+import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.gotrue.providers.builtin.Email
+import com.example.polytalkai.network.SupabaseManager
 
 @Composable
 fun AuthScreen(
-    onLoginSuccess: (String, String) -> Unit,
     onForgotPasswordNavigate: () -> Unit
 ) {
     var activeTab by remember { mutableStateOf("signin") }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
+    
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var isLoading by remember { mutableStateOf(false) }
+
+    val action = SupabaseManager.client.composeAuth.rememberLoginWithGoogle(
+        onResult = { result, fallback ->
+            when (result) {
+                is NativeSignInResult.Success -> { }
+                else -> {
+                    Toast.makeText(context, "Google login fallback", Toast.LENGTH_SHORT).show()
+                }
+            }
+        },
+        fallback = {}
+    )
 
     Column(
         modifier = Modifier
@@ -204,14 +228,39 @@ fun AuthScreen(
                     .clip(RoundedCornerShape(16.dp))
                     .background(Brush.linearGradient(listOf(Grad1, Grad2)))
                     .clickable {
-                        val email = if (emailInput.isEmpty()) "user@example.com" else emailInput
-                        val name = if (nameInput.isEmpty()) "User" else nameInput
-                        onLoginSuccess(email, name)
+                        if (isLoading) return@clickable
+                        val email = emailInput
+                        val password = passwordInput
+                        if (email.isBlank() || password.isBlank()) {
+                            Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
+                            return@clickable
+                        }
+                        
+                        isLoading = true
+                        scope.launch {
+                            try {
+                                if (activeTab == "signup") {
+                                    SupabaseManager.client.auth.signUpWith(Email) {
+                                        this.email = email
+                                        this.password = password
+                                    }
+                                } else {
+                                    SupabaseManager.client.auth.signInWith(Email) {
+                                        this.email = email
+                                        this.password = password
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, e.localizedMessage ?: "Error", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isLoading = false
+                            }
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (activeTab == "signin") "Sign In" else "Create Account",
+                    text = if (isLoading) "Loading..." else if (activeTab == "signin") "Sign In" else "Create Account",
                     fontFamily = SatoshiFontFamily,
                     fontWeight = FontWeight.Black,
                     fontSize = 15.sp,
@@ -250,7 +299,7 @@ fun AuthScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Social Buttons Grid
+        // Social Buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -258,38 +307,17 @@ fun AuthScreen(
             // Google Login Button
             Row(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .height(48.dp)
                     .glassmorphic(cornerRadius = 16)
-                    .clickable { onLoginSuccess("google.user@example.com", "Google User") },
+                    .clickable { action.startFlow() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 GoogleIcon(modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Google",
-                    fontFamily = SatoshiFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = TextColor
-                )
-            }
-
-            // GitHub Login Button
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .glassmorphic(cornerRadius = 16)
-                    .clickable { onLoginSuccess("github.user@example.com", "GitHub User") },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                GitHubIcon(modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "GitHub",
+                    text = "Continue with Google",
                     fontFamily = SatoshiFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,

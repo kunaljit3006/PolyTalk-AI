@@ -22,6 +22,10 @@ import androidx.compose.ui.unit.dp
 import com.example.polytalkai.screen.*
 import com.example.polytalkai.ui.theme.*
 import kotlinx.coroutines.delay
+import io.github.jan.supabase.gotrue.SessionStatus
+import io.github.jan.supabase.gotrue.auth
+import com.example.polytalkai.network.SupabaseManager
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,7 +55,8 @@ fun MainAppContainer() {
     var currentScreen by remember { mutableStateOf("splash") }
     var userEmail by remember { mutableStateOf("email@example.com") }
     var userName by remember { mutableStateOf("User") }
-    var isLoggedIn by remember { mutableStateOf(false) }
+    
+    val sessionStatus by SupabaseManager.client.auth.sessionStatus.collectAsState(initial = SessionStatus.LoadingFromStorage)
 
     // History and Saved states
     val historyItems = remember {
@@ -65,10 +70,29 @@ fun MainAppContainer() {
         mutableStateListOf<HistoryItem>()
     }
 
+    LaunchedEffect(sessionStatus) {
+        if (currentScreen != "splash") {
+            when (sessionStatus) {
+                is SessionStatus.Authenticated -> {
+                    val user = SupabaseManager.client.auth.currentUserOrNull()
+                    if (user != null) {
+                        userEmail = user.email ?: "email@example.com"
+                        userName = user.userMetadata?.get("full_name")?.toString()?.replace("\"", "") ?: "User"
+                    }
+                    currentScreen = "dashboard"
+                }
+                is SessionStatus.NotAuthenticated -> {
+                    currentScreen = "auth"
+                }
+                else -> {}
+            }
+        }
+    }
+
     LaunchedEffect(currentScreen) {
         if (currentScreen == "splash") {
             delay(3000)
-            currentScreen = if (isLoggedIn) "dashboard" else "auth"
+            currentScreen = if (sessionStatus is SessionStatus.Authenticated) "dashboard" else "auth"
         }
     }
 
@@ -100,12 +124,6 @@ fun MainAppContainer() {
             when (screen) {
                 "splash" -> SplashScreen()
                 "auth" -> AuthScreen(
-                    onLoginSuccess = { email, name ->
-                        userEmail = email
-                        userName = name
-                        isLoggedIn = true
-                        currentScreen = "dashboard"
-                    },
                     onForgotPasswordNavigate = { currentScreen = "forgot" }
                 )
                 "forgot" -> ForgotPasswordScreen(
@@ -141,16 +159,19 @@ fun MainAppContainer() {
                 )
                 "account" -> {
                     val context = androidx.compose.ui.platform.LocalContext.current
+                    val scope = rememberCoroutineScope()
                     AccountScreen(
                         userName = userName,
                         userEmail = userEmail,
                         onLogout = {
-                            isLoggedIn = false
-                            currentScreen = "auth"
+                            scope.launch {
+                                SupabaseManager.client.auth.signOut()
+                            }
                         },
                         onDeleteAccount = {
-                            isLoggedIn = false
-                            currentScreen = "auth"
+                            scope.launch {
+                                SupabaseManager.client.auth.signOut()
+                            }
                             android.widget.Toast.makeText(context, "Account deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onBack = { currentScreen = "dashboard" }
