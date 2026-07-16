@@ -39,7 +39,10 @@ import io.github.jan.supabase.compose.auth.composable.NativeSignInResult
 import io.github.jan.supabase.compose.auth.composeAuth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.providers.Google
 import com.example.polytalkai.network.SupabaseManager
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 
 @Composable
 fun AuthScreen(
@@ -54,16 +57,38 @@ fun AuthScreen(
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(false) }
 
+    LaunchedEffect(activeTab) {
+        emailInput = ""
+        passwordInput = ""
+        nameInput = ""
+    }
+
     val action = SupabaseManager.client.composeAuth.rememberSignInWithGoogle(
         onResult = { result ->
             when (result) {
-                is NativeSignInResult.Success -> { }
+                is NativeSignInResult.Success -> {
+                    Toast.makeText(context, "Google Sign-In successful!", Toast.LENGTH_SHORT).show()
+                }
+                is NativeSignInResult.ClosedByUser -> {
+                    Toast.makeText(context, "Sign-In cancelled", Toast.LENGTH_SHORT).show()
+                }
+                is NativeSignInResult.NetworkError -> {
+                    Toast.makeText(context, "Network error during Google Sign-In", Toast.LENGTH_SHORT).show()
+                }
                 else -> {
-                    Toast.makeText(context, "Google login fallback", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Native Sign-In failed, opening browser...", Toast.LENGTH_SHORT).show()
                 }
             }
         },
-        fallback = {}
+        fallback = {
+            scope.launch {
+                try {
+                    SupabaseManager.client.auth.signInWith(Google)
+                } catch (e: Exception) {
+                    Toast.makeText(context, e.localizedMessage ?: "Google sign-in failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     )
 
     Column(
@@ -244,11 +269,18 @@ fun AuthScreen(
                                         this.email = email
                                         this.password = password
                                     }
+                                    Toast.makeText(context, "Account created successfully! Check your email to verify.", Toast.LENGTH_LONG).show()
+                                    // Clear inputs and switch back to signin tab
+                                    emailInput = ""
+                                    passwordInput = ""
+                                    nameInput = ""
+                                    activeTab = "signin"
                                 } else {
                                     SupabaseManager.client.auth.signInWith(Email) {
                                         this.email = email
                                         this.password = password
                                     }
+                                    Toast.makeText(context, "Sign in successful!", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
                                 Toast.makeText(context, e.localizedMessage ?: "Error", Toast.LENGTH_SHORT).show()
@@ -336,11 +368,13 @@ fun CustomInputField(
     keyboardType: KeyboardType,
     isPassword: Boolean = false
 ) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         cursorBrush = SolidColor(PrimaryColor),
         textStyle = TextStyle(
             fontFamily = SatoshiFontFamily,
@@ -349,7 +383,7 @@ fun CustomInputField(
             color = TextColor
         ),
         decorationBox = { innerTextField ->
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
@@ -357,18 +391,34 @@ fun CustomInputField(
                     .background(Color(0x331B2838))
                     .border(1.dp, GlassBorderColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.CenterStart
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (value.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        fontFamily = SatoshiFontFamily,
-                        fontWeight = FontWeight.Normal,
-                        fontSize = 14.sp,
-                        color = TextMutedColor.copy(alpha = 0.6f)
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            fontFamily = SatoshiFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 14.sp,
+                            color = TextMutedColor.copy(alpha = 0.6f)
+                        )
+                    }
+                    innerTextField()
+                }
+                if (isPassword) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        tint = TextMutedColor,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { passwordVisible = !passwordVisible }
                     )
                 }
-                innerTextField()
             }
         }
     )
