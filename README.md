@@ -73,13 +73,15 @@ The base model was aggressively compressed while maintaining 16-bit precision tr
 ### Endurance Training
 * **Compute:** `Seq2SeqTrainer` utilizing `gradient_accumulation_steps=8` and `batch_size=2` to simulate a batch size of 16 without throwing CUDA OOM errors.
 * **Training Notebook:** [Kaggle: PolyTalk AI QLoRA Training](https://www.kaggle.com/code/kunaljitkashyap/polytalk-ai-fine-tuning-a-1-3b-model-on-18-langua/notebook)
-* **Output:** The final adapter was saved and pushed to the Hugging Face model hub: [heykunal123/polytalk-ai-lora-nllb-1.3b](https://huggingface.co/heykunal123/polytalk-ai-lora-nllb-1.3b).
+* **Model Adapter (LoRA):** The final adapter was saved and pushed to the Hugging Face model hub: [heykunal123/polytalk-ai-lora-nllb-1.3b](https://huggingface.co/heykunal123/polytalk-ai-lora-nllb-1.3b).
 
 ---
 
 ## ⚙️ Phase 2: FastAPI Backend Inference
 
 The API gateway acts as the bridge between the Android client and the AI model. It is designed to run efficiently on Hugging Face Free CPU Spaces.
+
+* **Live API Backend:** [Hugging Face Space: polytalk-ai-backend](https://huggingface.co/spaces/heykunal123/polytalk-ai-backend)
 
 ### Inference Logic
 1. **Model Instantiation:** Upon startup, the global scope loads the base `facebook/nllb-200-1.3B` and applies the `heykunal123/polytalk-ai-lora-nllb-1.3b` adapter via `PeftModel.from_pretrained()`. The model is forced into `.eval()` mode.
