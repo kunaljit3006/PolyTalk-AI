@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.example.polytalkai.screen.*
 import com.example.polytalkai.ui.theme.*
 import kotlinx.coroutines.delay
-import io.github.jan.supabase.gotrue.SessionStatus
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.auth
 import com.example.polytalkai.network.SupabaseManager
 import kotlinx.coroutines.launch
 
@@ -56,7 +56,7 @@ fun MainAppContainer() {
     var userEmail by remember { mutableStateOf("email@example.com") }
     var userName by remember { mutableStateOf("User") }
     
-    val sessionStatus by SupabaseManager.client.auth.sessionStatus.collectAsState(initial = SessionStatus.LoadingFromStorage)
+    val sessionStatus by SupabaseManager.client.auth.sessionStatus.collectAsState(initial = SessionStatus.Initializing)
 
     // History and Saved states
     val historyItems = remember {
@@ -170,9 +170,13 @@ fun MainAppContainer() {
                         },
                         onDeleteAccount = {
                             scope.launch {
-                                SupabaseManager.client.auth.signOut()
+                                val success = SupabaseManager.deleteCurrentUser()
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "Account deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "Failed to delete account", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
-                            android.widget.Toast.makeText(context, "Account deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onBack = { currentScreen = "dashboard" }
                     )

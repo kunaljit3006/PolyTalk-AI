@@ -34,11 +34,11 @@ import com.example.polytalkai.ui.theme.*
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import kotlinx.coroutines.launch
-import io.github.jan.supabase.compose.auth.rememberLoginWithGoogle
+import io.github.jan.supabase.compose.auth.composable.rememberSignInWithGoogle
 import io.github.jan.supabase.compose.auth.composable.NativeSignInResult
 import io.github.jan.supabase.compose.auth.composeAuth
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.gotrue.providers.builtin.Email
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 import com.example.polytalkai.network.SupabaseManager
 
 @Composable
@@ -54,8 +54,8 @@ fun AuthScreen(
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(false) }
 
-    val action = SupabaseManager.client.composeAuth.rememberLoginWithGoogle(
-        onResult = { result, fallback ->
+    val action = SupabaseManager.client.composeAuth.rememberSignInWithGoogle(
+        onResult = { result ->
             when (result) {
                 is NativeSignInResult.Success -> { }
                 else -> {
@@ -468,6 +468,9 @@ fun GitHubIcon(modifier: Modifier = Modifier) {
 @Composable
 fun ForgotPasswordScreen(onBack: () -> Unit) {
     var emailInput by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var isSending by remember { mutableStateOf(false) }
     
     Column(
         modifier = Modifier
@@ -542,11 +545,29 @@ fun ForgotPasswordScreen(onBack: () -> Unit) {
                 .height(52.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Brush.linearGradient(listOf(Grad1, Grad2)))
-                .clickable { onBack() },
+                .clickable {
+                    if (isSending) return@clickable
+                    if (emailInput.isBlank()) {
+                        Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
+                        return@clickable
+                    }
+                    isSending = true
+                    scope.launch {
+                        try {
+                            SupabaseManager.client.auth.resetPasswordForEmail(emailInput)
+                            Toast.makeText(context, "Reset link sent successfully!", Toast.LENGTH_SHORT).show()
+                            onBack()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, e.localizedMessage ?: "Error sending reset link", Toast.LENGTH_SHORT).show()
+                        } finally {
+                            isSending = false
+                        }
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Send Reset Link",
+                text = if (isSending) "Sending..." else "Send Reset Link",
                 fontFamily = SatoshiFontFamily,
                 fontWeight = FontWeight.Black,
                 fontSize = 15.sp,

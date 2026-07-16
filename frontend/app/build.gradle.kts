@@ -3,7 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("kotlinx-serialization") version "2.0.21"
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
