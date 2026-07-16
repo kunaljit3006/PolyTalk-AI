@@ -18,20 +18,20 @@
 
 ```mermaid
 graph TD
-    subgraph Client [Android Client (Jetpack Compose)]
+    subgraph Client ["Android Client (Jetpack Compose)"]
         UI[Compose UI (Glassmorphism)]
         Cam[CameraX / OCR]
         Voice[WebView: Three.js WebGL Shader]
         Net[Coroutines & HttpURLConnection]
     end
 
-    subgraph Backend [FastAPI Gateway (Hugging Face Spaces)]
+    subgraph Backend ["FastAPI Gateway (Hugging Face Spaces)"]
         API[REST API /translate]
         Tokenizer[AutoTokenizer NLLB]
         Model[PeftModel Inference (CPU)]
     end
 
-    subgraph Training [Kaggle Training Pipeline]
+    subgraph Training ["Kaggle Training Pipeline"]
         Data[Opus-100 & Hinglish Dataset]
         Prep[Tokenizer Preprocessing & Tag Injection]
         QLoRA[4-bit NF4 Base + r=64 LoRA]
@@ -72,6 +72,7 @@ The base model was aggressively compressed while maintaining 16-bit precision tr
 
 ### Endurance Training
 * **Compute:** `Seq2SeqTrainer` utilizing `gradient_accumulation_steps=8` and `batch_size=2` to simulate a batch size of 16 without throwing CUDA OOM errors.
+* **Training Notebook:** [Kaggle: PolyTalk AI QLoRA Training](https://www.kaggle.com/code/kunaljitkashyap/polytalk-ai-fine-tuning-a-1-3b-model-on-18-langua/notebook)
 * **Output:** The final adapter was saved and pushed to the Hugging Face model hub: [heykunal123/polytalk-ai-lora-nllb-1.3b](https://huggingface.co/heykunal123/polytalk-ai-lora-nllb-1.3b).
 
 ---
