@@ -15,7 +15,7 @@ object SupabaseManager {
         ) {
             install(Auth)
             install(ComposeAuth) {
-                googleNativeLogin(serverClientId = "YOUR_WEB_CLIENT_ID") // Configure this later
+                googleNativeLogin(serverClientId = "862113197757-actjl89abejm912laivdsihcvbi4tp2a.apps.googleusercontent.com") // Configured Google Client ID
             }
         }
     }
