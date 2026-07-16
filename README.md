@@ -19,22 +19,22 @@
 ```mermaid
 graph TD
     subgraph Client ["Android Client (Jetpack Compose)"]
-        UI[Compose UI (Glassmorphism)]
-        Cam[CameraX / OCR]
-        Voice[WebView: Three.js WebGL Shader]
-        Net[Coroutines & HttpURLConnection]
+        UI["Compose UI (Glassmorphism)"]
+        Cam["CameraX / OCR"]
+        Voice["WebView: Three.js WebGL Shader"]
+        Net["Coroutines & HttpURLConnection"]
     end
 
     subgraph Backend ["FastAPI Gateway (Hugging Face Spaces)"]
-        API[REST API /translate]
-        Tokenizer[AutoTokenizer NLLB]
-        Model[PeftModel Inference (CPU)]
+        API["REST API /translate"]
+        Tokenizer["AutoTokenizer NLLB"]
+        Model["PeftModel Inference (CPU)"]
     end
 
     subgraph Training ["Kaggle Training Pipeline"]
-        Data[Opus-100 & Hinglish Dataset]
-        Prep[Tokenizer Preprocessing & Tag Injection]
-        QLoRA[4-bit NF4 Base + r=64 LoRA]
+        Data["Opus-100 & Hinglish Dataset"]
+        Prep["Tokenizer Preprocessing & Tag Injection"]
+        QLoRA["4-bit NF4 Base + r=64 LoRA"]
     end
 
     Data --> Prep
@@ -45,7 +45,7 @@ graph TD
     Cam --> |Extracted String| Net
     Voice -.-> |Audio Levels| UI
     
-    Net <--> |JSON POST (src, tgt, text)| API
+    Net <--> |"JSON POST (src, tgt, text)"| API
     API --> Tokenizer
     Tokenizer --> Model
     Model --> |Decode Tensor| API
