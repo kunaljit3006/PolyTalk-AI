@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+torch
+transformers
+peft
+accelerate
+sentencepiece

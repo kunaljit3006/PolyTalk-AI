@@ -1,0 +1,13 @@
+<svg viewBox="0 0 120 120" width="512" height="512" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="120" rx="30" fill="#030A10" stroke="#31C5F0" stroke-width="1.5"/><svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" x="10" y="10" width="100" height="100">
+                    <defs>
+                        <linearGradient id="lrGradApp" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#0076FF"/>
+                            <stop offset="100%" stop-color="#31C5F0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M 38 75 V 25 C 38 12, 70 12, 70 34 C 70 52, 48 55, 38 55 L 22 70 L 38 61" stroke="url(#lrGradApp)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    
+                    <line x1="47" y1="28" x2="47" y2="40" stroke="url(#lrGradApp)" stroke-width="4.5" stroke-linecap="round"/>
+                    <line x1="54" y1="22" x2="54" y2="46" stroke="url(#lrGradApp)" stroke-width="4.5" stroke-linecap="round"/>
+                    <line x1="61" y1="28" x2="61" y2="40" stroke="url(#lrGradApp)" stroke-width="4.5" stroke-linecap="round"/>
+                </svg></svg>

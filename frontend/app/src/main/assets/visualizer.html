@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>3D Aura Visualizer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: transparent;
+    }
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      position: absolute;
+      width: 100% !important;
+      height: 100% !important;
+      background: transparent;
+      transition: opacity 1.0s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  </style>
+  <script src="three.min.js"></script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <script>
+    // =========================================================================
+    // TUNABLE PARAMETERS
+    // =========================================================================
+    const CONFIG = {
+      // Very large radius so it looks prominent in the 240dp container
+      baseRadius: 1.6,
+
+      idle: {
+        colorTL: '#a832a8', // Softer pink/purple
+        colorTR: '#4a148c', // Dark purple
+        colorBL: '#0277bd', // Softer blue
+        colorBR: '#1a237e', // Dark navy
+        noiseFreq: 0.5, // Very wide, smooth waves
+        noiseAmp: 0.2, // Permanent jelly-like deformation
+        speed: 0.15,
+      },
+      listening: {
+        colorTL: '#ff2a85', // Bright Pink
+        colorTR: '#7b1fa2', // Purple
+        colorBL: '#00e5ff', // Bright Cyan
+        colorBR: '#311b92', // Deep Purple
+        noiseFreq: 0.7,
+        noiseAmp: 0.4, // Noticeable liquid waves
+        speed: 0.5,
+      },
+      speaking: {
+        colorTL: '#ff4081', // Pink
+        colorTR: '#651fff', // Bright Purple
+        colorBL: '#00b0ff', // Light Blue
+        colorBR: '#e040fb', // Magenta
+        noiseFreq: 0.9,
+        noiseAmp: 0.5, // Strong, huge jelly ripples
+        speed: 0.8,
+      },
+
+      sensitivity: { amplitude: 1.5 }
+    };
+
+    // =========================================================================
+    // JAVASCRIPT-ANDROID BRIDGE CONTRACT (EXPOSED API)
+    // =========================================================================
+
+    window.updateAudioLevel = function(level) {
+      lastAudioUpdateTime = performance.now();
+      targetLevel = Math.min(Math.max(level * CONFIG.sensitivity.amplitude, 0.0), 1.0);
+    };
+
+    window.setVisualizerMode = function(mode) {
+      if (!CONFIG[mode]) return;
+      activeMode = mode;
+      const modeConfig = CONFIG[mode];
+
+      targetParams.colorTL.set(modeConfig.colorTL);
+      targetParams.colorTR.set(modeConfig.colorTR);
+      targetParams.colorBL.set(modeConfig.colorBL);
+      targetParams.colorBR.set(modeConfig.colorBR);
+      
+      targetParams.noiseFreq = modeConfig.noiseFreq;
+      targetParams.noiseAmp = modeConfig.noiseAmp;
+      targetParams.speed = modeConfig.speed;
+
+      const canvas = renderer ? renderer.domElement : null;
+      if (canvas) {
+        if (mode === 'idle') {
+          canvas.style.setProperty('--glow-color', 'rgba(74, 20, 140, 0.2)');
+        } else if (mode === 'listening') {
+          canvas.style.setProperty('--glow-color', 'rgba(0, 229, 255, 0.4)');
+        } else if (mode === 'speaking') {
+          canvas.style.setProperty('--glow-color', 'rgba(255, 64, 129, 0.4)');
+        }
+      }
+    };
+
+    window.pauseVisualizer = function() { isPaused = true; };
+    window.resumeVisualizer = function() {
+      if (isPaused) {
+        isPaused = false;
+        lastAudioUpdateTime = performance.now();
+        animate();
+      }
+    };
+
+    window.disposeVisualizer = function() {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      window.removeEventListener('resize', onWindowResize);
+      if (scene) {
+        scene.traverse((object) => {
+          if (object.isMesh) {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) object.material.dispose();
+          }
+        });
+      }
+      if (renderer) {
+        const container = document.getElementById('canvas-container');
+        if (renderer.domElement && container) container.removeChild(renderer.domElement);
+        renderer.dispose();
+        renderer.forceContextLoss();
+        renderer = null;
+      }
+      scene = null; camera = null; mesh = null;
+    };
+
+    // =========================================================================
+    // GLSL SHADERS — Solid, Smooth Liquid Aura
+    // =========================================================================
+
+    const VERTEX_SHADER = `
+      precision mediump float;
+
+      uniform float uTime;
+      uniform float uNoiseFreq;
+      uniform float uNoiseAmp;
+      uniform float uAudioLevel;
+
+      varying vec3 vNormal;
+      varying vec3 vViewPosition;
+      varying vec3 vPosition;
+      varying vec3 vLocalPosition;
+
+      vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+      vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+      float snoise(vec3 v){
+        const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+        vec3 i  = floor(v + dot(v, C.yyy) );
+        vec3 x0 =   v - i + dot(i, C.xxx) ;
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+        vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+        vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+        vec3 x3 = x0 - D.yyy;
+        i = mod(i, 289.0 );
+        vec4 p = permute( permute( permute(
+                   i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                 + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                 + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+        float n_ = 1.0/7.0;
+        vec3  ns = n_ * D.wyz - D.xzx;
+        vec4 j = p - 49.0 * floor(p * ns.z *ns.z);
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+        p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+        vec4 m = max(0.6 - vec3(dot(x0,x0), dot(x1,x1), dot(x2,x2)).xyzz, 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+      }
+
+      void main() {
+        vNormal = normalMatrix * normal;
+        vPosition = position;
+        vLocalPosition = position;
+
+        // Smooth liquid noise (snoise naturally returns roughly -1.0 to 1.0)
+        vec3 noiseCoord = position * uNoiseFreq + vec3(uTime * 0.3, -uTime * 0.4, uTime * 0.2);
+        float noiseVal = snoise(noiseCoord);
+
+        // Displacement (pushes inwards and outwards to create a jelly blob shape)
+        float displacement = noiseVal * (uNoiseAmp + uAudioLevel * 0.6);
+        
+        vec3 displacedPos = position + normal * displacement;
+
+        vec4 mvPosition = modelViewMatrix * vec4(displacedPos, 1.0);
+        vViewPosition = -mvPosition.xyz;
+
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const FRAGMENT_SHADER = `
+      precision mediump float;
+
+      uniform float uAudioLevel;
+      uniform vec3 uColorTL;
+      uniform vec3 uColorTR;
+      uniform vec3 uColorBL;
+      uniform vec3 uColorBR;
+
+      varying vec3 vNormal;
+      varying vec3 vViewPosition;
+      varying vec3 vLocalPosition;
+
+      void main() {
+        vec3 normal = normalize(vNormal);
+        vec3 viewDir = normalize(vViewPosition);
+
+        // Normalize local position to 0..1 for color mixing
+        // The sphere radius is ~1.6, so we divide by 1.6 to map -1 to 1 roughly.
+        vec3 pos = vLocalPosition / 1.6;
+        float mixX = clamp((pos.x + 1.0) * 0.5, 0.0, 1.0);
+        float mixY = clamp((pos.y + 1.0) * 0.5, 0.0, 1.0);
+        
+        // Base dark center matching the reference
+        vec3 colorCenter = vec3(0.04, 0.02, 0.12);
+
+        // Interpolate the 4 corners for the rim
+        vec3 colorTop = mix(uColorTL, uColorTR, mixX);
+        vec3 colorBottom = mix(uColorBL, uColorBR, mixX);
+        vec3 rimColorBase = mix(colorBottom, colorTop, mixY);
+        
+        // Make the rim pulsate slightly with audio
+        rimColorBase += vec3(0.2, 0.1, 0.3) * uAudioLevel;
+
+        // Calculate Fresnel (Rim Lighting)
+        float f = max(0.0, dot(normal, viewDir));
+        float fresnel = pow(1.0 - f, 1.6); // Lower power = thicker colored rim
+
+        // Mix center and rim. 1.8 multiplier pushes the rim color further inwards
+        vec3 finalColor = mix(colorCenter, rimColorBase, clamp(fresnel * 1.8, 0.0, 1.0));
+        
+        // Add a specular highlight (the glossy reflection) on the top left
+        vec3 lightDir = normalize(vec3(-1.0, 1.0, 1.0));
+        vec3 halfVector = normalize(lightDir + viewDir);
+        float specularDot = max(0.0, dot(normal, halfVector));
+        float specular = pow(specularDot, 25.0); // Glossiness
+        
+        // Highlight color (pinkish white)
+        vec3 highlightColor = vec3(1.0, 0.8, 0.9);
+        finalColor += specular * highlightColor * (0.6 + uAudioLevel * 0.4);
+        
+        // Overall soft brightness bump based on audio
+        finalColor += rimColorBase * uAudioLevel * 0.15;
+
+        // Smooth fade out at the absolute edges to avoid jagged pixels
+        float edgeFade = smoothstep(0.0, 0.2, f);
+        
+        gl_FragColor = vec4(finalColor, edgeFade);
+      }
+    `;
+
+    // =========================================================================
+    // VISUALIZER SETUP & LOGIC
+    // =========================================================================
+
+    let scene, camera, renderer, animationFrameId;
+    let mesh;
+    let uniforms;
+    let lastTime = performance.now();
+    let timeAccumulator = 0.0;
+    let activeMode = 'idle';
+    let isPaused = false;
+
+    let currentLevel = 0.0, targetLevel = 0.0;
+    let lastAudioUpdateTime = performance.now();
+
+    const activeParams = {
+      colorTL: new THREE.Color(CONFIG.idle.colorTL),
+      colorTR: new THREE.Color(CONFIG.idle.colorTR),
+      colorBL: new THREE.Color(CONFIG.idle.colorBL),
+      colorBR: new THREE.Color(CONFIG.idle.colorBR),
+      noiseFreq: CONFIG.idle.noiseFreq,
+      noiseAmp: CONFIG.idle.noiseAmp,
+      speed: CONFIG.idle.speed,
+    };
+
+    const targetParams = {
+      colorTL: new THREE.Color(CONFIG.idle.colorTL),
+      colorTR: new THREE.Color(CONFIG.idle.colorTR),
+      colorBL: new THREE.Color(CONFIG.idle.colorBL),
+      colorBR: new THREE.Color(CONFIG.idle.colorBR),
+      noiseFreq: CONFIG.idle.noiseFreq,
+      noiseAmp: CONFIG.idle.noiseAmp,
+      speed: CONFIG.idle.speed,
+    };
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.z = 4.2;
+
+      // Antialiasing is extremely heavy on mobile GPUs. It is virtually invisible on high-DPI screens, so we disable it for a massive FPS boost.
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      // Cap at 1.0. Rendering above native CSS resolution destroys framerate on older/mid-range Android devices.
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0)); 
+      renderer.setClearColor(0x000000, 0); 
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      uniforms = {
+        uTime: { value: 0.0 },
+        uNoiseFreq: { value: activeParams.noiseFreq },
+        uNoiseAmp: { value: activeParams.noiseAmp },
+        uAudioLevel: { value: 0.0 },
+        uColorTL: { value: activeParams.colorTL },
+        uColorTR: { value: activeParams.colorTR },
+        uColorBL: { value: activeParams.colorBL },
+        uColorBR: { value: activeParams.colorBR }
+      };
+
+      // 40x40 reduces vertex shader calculations by nearly 60% compared to 64x64. Smooth shading keeps it looking perfectly round.
+      const geometry = new THREE.SphereGeometry(CONFIG.baseRadius, 40, 40);
+
+      const material = new THREE.ShaderMaterial({
+        vertexShader: VERTEX_SHADER,
+        fragmentShader: FRAGMENT_SHADER,
+        uniforms: uniforms,
+        wireframe: false,
+        transparent: true,
+        depthWrite: false
+      });
+
+      mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+
+      window.addEventListener('resize', onWindowResize);
+      setupDebugControls();
+      animate();
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function setupDebugControls() {
+      let mockAudioInterval = null;
+      function startMockAudio() {
+        if (mockAudioInterval) clearInterval(mockAudioInterval);
+        mockAudioInterval = setInterval(() => {
+          if (isPaused) return;
+          const time = performance.now() * 0.003;
+          let level = 0.35 + 0.45 * Math.sin(time);
+          level += (Math.random() - 0.5) * 0.1;
+          window.updateAudioLevel(level);
+        }, 30);
+      }
+      function stopMockAudio() {
+        if (mockAudioInterval) {
+          clearInterval(mockAudioInterval);
+          mockAudioInterval = null;
+        }
+      }
+      function handleModeSelection(mode) {
+        window.setVisualizerMode(mode);
+        if (mode === 'idle') {
+          stopMockAudio();
+          window.updateAudioLevel(0.0);
+        } else {
+          startMockAudio();
+        }
+      }
+      window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (key === 'i' || key === '1') handleModeSelection('idle');
+        else if (key === 'l' || key === '2') handleModeSelection('listening');
+        else if (key === 's' || key === '3') handleModeSelection('speaking');
+        else if (key === 'p') {
+          if (isPaused) window.resumeVisualizer();
+          else window.pauseVisualizer();
+        }
+      });
+      function checkUrlRoute() {
+        const hash = window.location.hash.substring(1).toLowerCase();
+        const urlParams = new URLSearchParams(window.location.search);
+        const modeParam = urlParams.get('mode') || hash;
+        if (modeParam === 'listening' || modeParam === 'speaking' || modeParam === 'idle') {
+          handleModeSelection(modeParam);
+        }
+      }
+      checkUrlRoute();
+      window.addEventListener('hashchange', checkUrlRoute);
+    }
+
+    function animate() {
+      if (isPaused || !renderer) return;
+      animationFrameId = requestAnimationFrame(animate);
+
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (activeMode !== 'idle' && (now - lastAudioUpdateTime > 800)) {
+        targetLevel = 0.0;
+      }
+
+      const clampedDelta = Math.min(delta, 0.05);
+      const dtAlpha = 1.0 - Math.pow(1.0 - 0.08, clampedDelta * 60.0);
+      currentLevel += (targetLevel - currentLevel) * dtAlpha;
+
+      const modeAlpha = 1.0 - Math.pow(1.0 - 0.04, clampedDelta * 60.0);
+      activeParams.colorTL.lerp(targetParams.colorTL, modeAlpha);
+      activeParams.colorTR.lerp(targetParams.colorTR, modeAlpha);
+      activeParams.colorBL.lerp(targetParams.colorBL, modeAlpha);
+      activeParams.colorBR.lerp(targetParams.colorBR, modeAlpha);
+      activeParams.noiseFreq += (targetParams.noiseFreq - activeParams.noiseFreq) * modeAlpha;
+      activeParams.noiseAmp += (targetParams.noiseAmp - activeParams.noiseAmp) * modeAlpha;
+      activeParams.speed += (targetParams.speed - activeParams.speed) * modeAlpha;
+
+      timeAccumulator += delta * activeParams.speed;
+
+      uniforms.uTime.value = timeAccumulator;
+      uniforms.uNoiseFreq.value = activeParams.noiseFreq;
+      uniforms.uNoiseAmp.value = activeParams.noiseAmp;
+      uniforms.uAudioLevel.value = currentLevel;
+      uniforms.uColorTL.value = activeParams.colorTL;
+      uniforms.uColorTR.value = activeParams.colorTR;
+      uniforms.uColorBL.value = activeParams.colorBL;
+      uniforms.uColorBR.value = activeParams.colorBR;
+
+      // Slow elegant rotation
+      mesh.rotation.y = timeAccumulator * 0.15;
+      mesh.rotation.z = timeAccumulator * 0.05;
+
+      renderer.render(scene, camera);
+    }
+
+    init();
+  </script>
+</body>
+</html>
