@@ -7,3 +7,4 @@ peft
 accelerate
 sentencepiece
 gTTS
+scipy

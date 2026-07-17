@@ -1,13 +1,25 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, VitsModel
 from peft import PeftModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from gtts import gTTS
 import io
 import os
+import scipy.io.wavfile
+
+# Lazy loaded TTS models
+mms_tts_models = {}
+mms_tts_tokenizers = {}
+
+def get_mms_tts_model(lang_code):
+    if lang_code not in mms_tts_models:
+        model_id = f"facebook/mms-tts-{lang_code}"
+        mms_tts_models[lang_code] = VitsModel.from_pretrained(model_id).to(device)
+        mms_tts_tokenizers[lang_code] = AutoTokenizer.from_pretrained(model_id)
+    return mms_tts_models[lang_code], mms_tts_tokenizers[lang_code]
 
 app = FastAPI(title="PolyTalk AI Translation API")
 
@@ -102,8 +114,8 @@ nllb_to_gtts = {
     "kan_Knda": "kn",
     "mal_Mlym": "ml",
     "pan_Guru": "pa",
-    "ory_Orya": "or",
-    "asm_Beng": "as",
+    "ory_Orya": "ori", # Will be handled by MMS
+    "asm_Beng": "asm", # Will be handled by MMS
     "fra_Latn": "fr",
     "spa_Latn": "es",
     "deu_Latn": "de",
@@ -115,13 +127,28 @@ nllb_to_gtts = {
 @app.get("/tts")
 async def text_to_speech(text: str, lang: str):
     gtts_lang = nllb_to_gtts.get(lang, "en")
+    
     try:
-        # Generate speech in memory and stream the MP3 payload
-        tts = gTTS(text=text, lang=gtts_lang)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        return StreamingResponse(fp, media_type="audio/mpeg")
+        if gtts_lang in ["asm", "ori"]:
+            # Use Meta's native MMS TTS models for Assamese and Odia
+            model_tts, tokenizer_tts = get_mms_tts_model(gtts_lang)
+            inputs = tokenizer_tts(text, return_tensors="pt").to(device)
+            with torch.no_grad():
+                output = model_tts(**inputs).waveform
+            
+            fp = io.BytesIO()
+            # Convert PyTorch tensor to numpy array for scipy
+            audio_data = output.cpu().numpy().squeeze()
+            scipy.io.wavfile.write(fp, rate=model_tts.config.sampling_rate, data=audio_data)
+            fp.seek(0)
+            return StreamingResponse(fp, media_type="audio/wav")
+        else:
+            # Generate speech in memory and stream the MP3 payload using gTTS
+            tts = gTTS(text=text, lang=gtts_lang)
+            fp = io.BytesIO()
+            tts.write_to_fp(fp)
+            fp.seek(0)
+            return StreamingResponse(fp, media_type="audio/mpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Text-to-Speech generation failed: {str(e)}")
 
