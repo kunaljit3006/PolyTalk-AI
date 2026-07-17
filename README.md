@@ -86,6 +86,7 @@ graph TD
 
     subgraph DevOps ["⏰ DevOps Layer"]
         Cron["UptimeRobot<br/>Health Pings (12hr)"]
+        CI["GitHub Actions<br/>CI/CD Pipeline"]
     end
 
     UI -- "Google OAuth 2.0 Login" --> Auth
@@ -93,6 +94,7 @@ graph TD
     UI -- "HTTP POST /translate" --> FastAPI
     UI -- "HTTP GET /tts" --> FastAPI
     Cron -- "GET /health" --> FastAPI
+    CI -- "Auto-Deploy on Push" --> FastAPI
 ```
 
 ---
@@ -256,7 +258,14 @@ The FastAPI gateway bridges the Android client and the AI model, designed to run
 1. **Startup:** Loads `facebook/nllb-200-1.3B` base model and attaches the `heykunal123/polytalk-ai-lora-nllb-1.3b` adapter via `PeftModel.from_pretrained()`. Model enters `.eval()` mode.
 2. **Translation:** Validates input via Pydantic `BaseModel`, dynamically sets `tokenizer.src_lang`, converts target language to token ID, generates output within `torch.no_grad()` block using `forced_bos_token_id` for language control.
 3. **TTS:** Maps NLLB language codes to ISO codes, generates speech via `gTTS`, and streams the MP3 payload as `StreamingResponse`.
-4. **Deployment:** Dockerized with `python:3.9-slim`, served by `Uvicorn` on port 7860 (Hugging Face standard).
+
+### CI/CD Deployment Pipeline
+
+The project utilizes **GitHub Actions** for continuous deployment to Hugging Face Spaces.
+
+- **Trigger:** Automatic deployment on `push` to the `main` branch (specifically for changes in the `backend/` directory).
+- **Process:** The workflow clones the Hugging Face Space repository, securely syncs the backend code using `rsync` (preventing directory mismatch), and pushes it to Hugging Face via API tokens.
+- **Hosting:** Dockerized with `python:3.9-slim`, served by `Uvicorn` on port 7860 (Hugging Face standard).
 
 ### Uptime Monitoring
 
