@@ -31,8 +31,7 @@ jobs:
           cd hf_space
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          # Fix for Hugging Face Fine-Grained Tokens: username must be oauth2 or user
-          git remote set-url origin https://user:$HF_TOKEN@huggingface.co/spaces/heykunal123/polytalk-ai-backend
+          git remote set-url origin https://heykunal123:$HF_TOKEN@huggingface.co/spaces/heykunal123/polytalk-ai-backend
           git add .
           
           # If there are changes, commit and push them
