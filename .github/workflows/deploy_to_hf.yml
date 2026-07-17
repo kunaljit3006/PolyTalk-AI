@@ -37,7 +37,8 @@ jobs:
           # If there are changes, commit and push them
           if ! git diff --staged --quiet; then
             git commit -m "Auto-deploy backend from GitHub Actions"
-            git push origin main
+            echo "Pushing to Hugging Face..."
+            git push origin main || { echo "Git Push Failed! Did you add the HF_TOKEN secret correctly?"; exit 1; }
           else
             echo "No changes to deploy."
           fi
