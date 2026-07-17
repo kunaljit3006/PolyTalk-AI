@@ -75,8 +75,11 @@ fun AuthScreen(
                 is NativeSignInResult.NetworkError -> {
                     Toast.makeText(context, "Network error during Google Sign-In", Toast.LENGTH_SHORT).show()
                 }
+                is NativeSignInResult.Error -> {
+                    Toast.makeText(context, "Native Error: ${result.message}", Toast.LENGTH_LONG).show()
+                }
                 else -> {
-                    Toast.makeText(context, "Native Sign-In failed, opening browser...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Native failed: $result", Toast.LENGTH_SHORT).show()
                 }
             }
         },

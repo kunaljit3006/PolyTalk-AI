@@ -4,6 +4,9 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from peft import PeftModel
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from gtts import gTTS
+import io
 import os
 
 app = FastAPI(title="PolyTalk AI Translation API")
@@ -86,6 +89,41 @@ def get_languages():
             {"name": "Japanese", "code": "jpn_Jpan"}
         ]
     }
+
+# Mapping of NLLB language tags to 2-letter ISO language codes for gTTS
+nllb_to_gtts = {
+    "eng_Latn": "en",
+    "hin_Deva": "hi",
+    "tam_Taml": "ta",
+    "tel_Telu": "te",
+    "ben_Beng": "bn",
+    "mar_Deva": "mr",
+    "guj_Gujr": "gu",
+    "kan_Knda": "kn",
+    "mal_Mlym": "ml",
+    "pan_Guru": "pa",
+    "ory_Orya": "or",
+    "asm_Beng": "as",
+    "fra_Latn": "fr",
+    "spa_Latn": "es",
+    "deu_Latn": "de",
+    "ita_Latn": "it",
+    "rus_Cyrl": "ru",
+    "jpn_Jpan": "ja"
+}
+
+@app.get("/tts")
+async def text_to_speech(text: str, lang: str):
+    gtts_lang = nllb_to_gtts.get(lang, "en")
+    try:
+        # Generate speech in memory and stream the MP3 payload
+        tts = gTTS(text=text, lang=gtts_lang)
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        return StreamingResponse(fp, media_type="audio/mpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Text-to-Speech generation failed: {str(e)}")
 
 @app.post("/translate")
 async def translate(req: TranslationRequest):

@@ -10,6 +10,9 @@ import io.github.jan.supabase.compose.auth.googleNativeLogin
 import io.ktor.client.request.delete
 import io.ktor.client.request.header
 
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.postgrest.postgrest
+
 object SupabaseManager {
     val client: SupabaseClient by lazy {
         createSupabaseClient(
@@ -20,24 +23,20 @@ object SupabaseManager {
             install(ComposeAuth) {
                 googleNativeLogin(serverClientId = "862113197757-actjl89abejm912laivdsihcvbi4tp2a.apps.googleusercontent.com") // Configured Google Client ID
             }
+            install(Postgrest)
         }
     }
 
     suspend fun deleteCurrentUser(): Boolean {
         val session = client.auth.currentSessionOrNull() ?: return false
-        val token = session.accessToken
-        val httpClient = io.ktor.client.HttpClient(io.ktor.client.engine.android.Android)
         return try {
-            val response: io.ktor.client.statement.HttpResponse = httpClient.delete("${BuildConfig.SUPABASE_URL}/auth/v1/user") {
-                header("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                header("Authorization", "Bearer $token")
-            }
+            // Call the secure Postgres function to delete the user
+            client.postgrest.rpc("delete_user")
             client.auth.signOut()
-            response.status.value in 200..299
+            true
         } catch (e: Exception) {
+            android.util.Log.e("SupabaseManager", "Delete Exception: ${e.localizedMessage}")
             false
-        } finally {
-            httpClient.close()
         }
     }
 }

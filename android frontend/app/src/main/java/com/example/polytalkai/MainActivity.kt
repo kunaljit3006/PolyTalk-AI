@@ -62,6 +62,7 @@ fun MainAppContainer() {
     var currentScreen by remember { mutableStateOf("splash") }
     var userEmail by remember { mutableStateOf("email@example.com") }
     var userName by remember { mutableStateOf("User") }
+    var userAvatarUrl by remember { mutableStateOf<String?>(null) }
     
     val sessionStatus by SupabaseManager.client.auth.sessionStatus.collectAsState(initial = SessionStatus.Initializing)
 
@@ -78,21 +79,43 @@ fun MainAppContainer() {
     }
 
     LaunchedEffect(sessionStatus) {
-        if (currentScreen != "splash") {
-            when (sessionStatus) {
-                is SessionStatus.Authenticated -> {
-                    val user = SupabaseManager.client.auth.currentUserOrNull()
-                    if (user != null) {
-                        userEmail = user.email ?: "email@example.com"
-                        userName = user.userMetadata?.get("full_name")?.toString()?.replace("\"", "") ?: "User"
+        when (sessionStatus) {
+            is SessionStatus.Authenticated -> {
+                // When restoring from background, local storage might miss metadata.
+                // We use the session user first, then launch a request to get the latest.
+                val sessionUser = (sessionStatus as SessionStatus.Authenticated).session.user
+                if (sessionUser != null) {
+                    userEmail = sessionUser.email ?: "email@example.com"
+                    val metaName = sessionUser.userMetadata?.get("full_name") ?: sessionUser.userMetadata?.get("name")
+                    userName = metaName?.toString()?.replace("\"", "") ?: "User"
+                    val avatar = sessionUser.userMetadata?.get("avatar_url") ?: sessionUser.userMetadata?.get("picture")
+                    userAvatarUrl = avatar?.toString()?.replace("\"", "")
+                }
+                
+                // Fetch latest from server to guarantee we have the name
+                kotlinx.coroutines.GlobalScope.launch {
+                    try {
+                        val latestUser = SupabaseManager.client.auth.retrieveUserForCurrentSession(updateSession = true)
+                        userEmail = latestUser.email ?: "email@example.com"
+                        val metaName = latestUser.userMetadata?.get("full_name") ?: latestUser.userMetadata?.get("name")
+                        userName = metaName?.toString()?.replace("\"", "") ?: "User"
+                        val avatar = latestUser.userMetadata?.get("avatar_url") ?: latestUser.userMetadata?.get("picture")
+                        userAvatarUrl = avatar?.toString()?.replace("\"", "")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
+                }
+
+                if (currentScreen != "splash") {
                     currentScreen = "dashboard"
                 }
-                is SessionStatus.NotAuthenticated -> {
+            }
+            is SessionStatus.NotAuthenticated -> {
+                if (currentScreen != "splash") {
                     currentScreen = "auth"
                 }
-                else -> {}
             }
+            else -> {}
         }
     }
 
@@ -170,6 +193,7 @@ fun MainAppContainer() {
                     AccountScreen(
                         userName = userName,
                         userEmail = userEmail,
+                        userAvatarUrl = userAvatarUrl,
                         onLogout = {
                             scope.launch {
                                 SupabaseManager.client.auth.signOut()

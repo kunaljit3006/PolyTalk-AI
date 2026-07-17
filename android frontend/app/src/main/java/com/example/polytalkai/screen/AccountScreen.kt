@@ -22,15 +22,19 @@ import androidx.compose.ui.unit.sp
 import com.example.polytalkai.glassmorphic
 import com.example.polytalkai.ui.theme.*
 
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+
 @Composable
 fun AccountScreen(
     userName: String,
     userEmail: String,
+    userAvatarUrl: String?,
     onLogout: () -> Unit,
     onDeleteAccount: () -> Unit,
     onBack: () -> Unit
 ) {
-    var darkModeEnabled by remember { mutableStateOf(true) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -87,12 +91,24 @@ fun AccountScreen(
                     .border(1.5.dp, GlassBorderColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Avatar",
-                    tint = TextColor,
-                    modifier = Modifier.size(40.dp)
-                )
+                if (userAvatarUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(userAvatarUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Avatar",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Avatar",
+                        tint = TextColor,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -120,32 +136,6 @@ fun AccountScreen(
                     .glassmorphic(cornerRadius = 18)
                     .padding(8.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Dark Theme Mode",
-                        fontFamily = SatoshiFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp,
-                        color = TextColor
-                    )
-                    Switch(
-                        checked = darkModeEnabled,
-                        onCheckedChange = { darkModeEnabled = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = PrimaryColor,
-                            checkedTrackColor = Color(0x3331C5F0)
-                        )
-                    )
-                }
-
-                HorizontalDivider(color = GlassBorderColor, thickness = 1.dp)
-
                 // Clickable Row for Log Out
                 Row(
                     modifier = Modifier

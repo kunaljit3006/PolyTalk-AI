@@ -66,13 +66,10 @@ fun TextTranslationScreen(
     var showFromLangDialog by remember { mutableStateOf(false) }
     var showToLangDialog by remember { mutableStateOf(false) }
 
-    // TTS Setup
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    // Stop any playing TTS audio when navigating away from this screen
     DisposableEffect(Unit) {
-        val ttsInstance = TextToSpeech(context) { status -> }
-        tts = ttsInstance
         onDispose {
-            ttsInstance.shutdown()
+            PolyTalkApiClient.stopSpeaking()
         }
     }
 
@@ -428,10 +425,7 @@ fun TextTranslationScreen(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .clickable {
-                                        tts?.let { t ->
-                                            t.language = getLocaleForLanguage(toLang)
-                                            t.speak(translatedText, TextToSpeech.QUEUE_FLUSH, null, null)
-                                        }
+                                        PolyTalkApiClient.speak(translatedText, toLang)
                                     }
                             )
                             // Copy button

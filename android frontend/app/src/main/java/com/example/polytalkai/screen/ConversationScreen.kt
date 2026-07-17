@@ -77,23 +77,11 @@ fun ConversationScreen(onBack: () -> Unit) {
     var isThinking by remember { mutableStateOf(false) }
 
     var isTtsSpeaking by remember { mutableStateOf(false) }
-    // TTS Engine Setup
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    // Stop any playing TTS audio when navigating away from this screen
     DisposableEffect(Unit) {
-        val ttsInstance = TextToSpeech(context) { }
-        ttsInstance.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                isTtsSpeaking = true
-            }
-            override fun onDone(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
-            override fun onError(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
-        })
-        tts = ttsInstance
-        onDispose { ttsInstance.shutdown() }
+        onDispose {
+            PolyTalkApiClient.stopSpeaking()
+        }
     }
 
     // Supported NLLB 18 languages
@@ -161,13 +149,12 @@ fun ConversationScreen(onBack: () -> Unit) {
                 )
 
                 // Speak translation out loud automatically
-                tts?.let { t ->
-                    t.language = getLocaleForLanguage(target)
-                    val params = Bundle().apply {
-                        putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "translation_speak")
-                    }
-                    t.speak(translated, TextToSpeech.QUEUE_FLUSH, params, "translation_speak")
-                }
+                PolyTalkApiClient.speak(
+                    text = translated,
+                    fromLang = target,
+                    onStart = { isTtsSpeaking = true },
+                    onDone = { isTtsSpeaking = false }
+                )
             } else {
                 Toast.makeText(context, "Translation failed. Check backend connection.", Toast.LENGTH_SHORT).show()
             }
@@ -417,13 +404,12 @@ fun ConversationScreen(onBack: () -> Unit) {
                                         modifier = Modifier
                                             .size(20.dp)
                                             .clickable {
-                                                tts?.let { t ->
-                                                    t.language = getLocaleForLanguage(msg.targetLanguage)
-                                                    val params = Bundle().apply {
-                                                        putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "bubble_speak_${msg.id}")
-                                                    }
-                                                    t.speak(msg.translatedText, TextToSpeech.QUEUE_FLUSH, params, "bubble_speak_${msg.id}")
-                                                }
+                                                PolyTalkApiClient.speak(
+                                                    text = msg.translatedText,
+                                                    fromLang = msg.targetLanguage,
+                                                    onStart = { isTtsSpeaking = true },
+                                                    onDone = { isTtsSpeaking = false }
+                                                )
                                             }
                                     )
                                 }

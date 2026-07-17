@@ -62,26 +62,11 @@ fun VoiceTranslationScreen(onBack: () -> Unit) {
     var isTranslating by remember { mutableStateOf(false) }
     var isSpeaking by remember { mutableStateOf(false) }
 
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    // Stop any playing TTS audio when navigating away from this screen
     DisposableEffect(Unit) {
-        var ttsInstance: TextToSpeech? = null
-        ttsInstance = TextToSpeech(context) { status -> 
-            if (status == TextToSpeech.SUCCESS) {
-                ttsInstance?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        isSpeaking = true
-                    }
-                    override fun onDone(utteranceId: String?) {
-                        isSpeaking = false
-                    }
-                    override fun onError(utteranceId: String?) {
-                        isSpeaking = false
-                    }
-                })
-            }
+        onDispose {
+            PolyTalkApiClient.stopSpeaking()
         }
-        tts = ttsInstance
-        onDispose { ttsInstance?.shutdown() }
     }
 
     // Speech Recognizer Setup
@@ -124,8 +109,12 @@ fun VoiceTranslationScreen(onBack: () -> Unit) {
                             translatedText = result.getOrThrow()
                             isTranslating = false
                             
-                            tts?.language = getLocaleForLanguage(toLang)
-                            tts?.speak(translatedText, TextToSpeech.QUEUE_FLUSH, null, "TranslationUtteranceId")
+                            PolyTalkApiClient.speak(
+                                text = translatedText,
+                                fromLang = toLang,
+                                onStart = { isSpeaking = true },
+                                onDone = { isSpeaking = false }
+                            )
                         } else {
                             translatedText = "Translation failed."
                             isTranslating = false

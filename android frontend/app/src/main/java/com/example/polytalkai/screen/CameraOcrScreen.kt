@@ -87,12 +87,11 @@ fun CameraOcrScreen(onBack: () -> Unit) {
 
     var containerHeightPx by remember { mutableStateOf(0) }
     
-    // TTS Engine Setup
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    // Stop any playing TTS audio when navigating away from this screen
     DisposableEffect(Unit) {
-        val ttsInstance = TextToSpeech(context) { }
-        tts = ttsInstance
-        onDispose { ttsInstance.shutdown() }
+        onDispose {
+            PolyTalkApiClient.stopSpeaking()
+        }
     }
 
     // Laser Animation when scanning mode is active
@@ -402,10 +401,7 @@ fun CameraOcrScreen(onBack: () -> Unit) {
                                             Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", tint = TextMutedColor)
                                         }
                                         IconButton(onClick = { 
-                                            tts?.let { t ->
-                                                t.language = getLocaleForLanguage(targetLang)
-                                                t.speak(ocrTranslatedText, TextToSpeech.QUEUE_FLUSH, null, null)
-                                            }
+                                            PolyTalkApiClient.speak(ocrTranslatedText, targetLang)
                                         }) {
                                             Icon(imageVector = Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Speak", tint = TextMutedColor)
                                         }

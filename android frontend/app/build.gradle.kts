@@ -83,5 +83,11 @@ dependencies {
     // Supabase
     implementation(libs.supabase.gotrue)
     implementation(libs.supabase.composeauth)
+    implementation(libs.supabase.postgrest)
     implementation(libs.ktor.client.android)
+
+    // Google Credential Manager (Required for Native Google Login)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
 }
